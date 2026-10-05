@@ -32,4 +32,24 @@ def geojson_to_df(payload: dict) -> pd.DataFrame:
     Columns: 'id' (top level of each feature), every key in 'properties',
     plus 'lon', 'lat', 'depth_km' from geometry.coordinates = [lon, lat, depth].
     """
-    ...
+    rows = []
+
+    for feature in payload.get("features", []):
+        properties = feature.get("properties", {})
+        coordinates = feature.get("geometry", {}).get("coordinates", [])
+
+        lon = coordinates[0] if len(coordinates) > 0 else None
+        lat = coordinates[1] if len(coordinates) > 1 else None
+        depth = coordinates[2] if len(coordinates) > 2 else None
+
+        row = {
+            "id": feature.get("id"),
+            **properties,
+            "lon": lon,
+            "lat": lat,
+            "depth_km": depth,
+        }
+
+        rows.append(row)
+
+    return pd.DataFrame(rows)
