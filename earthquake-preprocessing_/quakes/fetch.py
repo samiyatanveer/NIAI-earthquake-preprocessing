@@ -12,7 +12,19 @@ def fetch_feed(feed: str = "all_week") -> dict:
     is not valid JSON.
     """
     ...
+    import requests
 
+    url = f"{BASE}/{feed}.geojson"
+
+    response = requests.get(url, timeout=15)
+    response.raise_for_status()
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise ValueError(
+            f"USGS feed did not return valid JSON for feed '{feed}'."
+        ) from exc
 
 def geojson_to_df(payload: dict) -> pd.DataFrame:
     """One row per event.
