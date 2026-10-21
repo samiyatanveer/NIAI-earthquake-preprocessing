@@ -1,5 +1,4 @@
-"""Task 3: cleaning."""
-
+"""Small, explicit cleaning functions for USGS earthquake records."""
 import pandas as pd
 
 
@@ -17,75 +16,47 @@ def epoch_ms_to_datetime(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def dedupe_latest(df: pd.DataFrame) -> pd.DataFrame:
-    """One row per 'id', keeping the row with the greatest 'updated'."""
-
-    df = df.copy()
-
-    return (
-        df.sort_values("updated")
-        .drop_duplicates("id", keep="last")
-        .reset_index(drop=True)
-    )
+    """Keep the newest updated row for each event id."""
+    if df.empty or "id" not in df.columns or "updated" not in df.columns:
+        return df.copy().reset_index(drop=True)
+    return df.sort_values("updated").drop_duplicates("id", keep="last").reset_index(drop=True)
 
 
 def keep_earthquakes(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalise 'type' and keep only 'earthquake'."""
-
-    df = df.copy()
-
-    df["type"] = (
-        df["type"]
-        .astype("string")
-        .str.strip()
-        .str.lower()
-    )
-
-    return df[df["type"] == "earthquake"].copy()
+    """Keep rows whose normalised type is earthquake."""
+    out = df.copy()
+    if "type" not in out.columns:
+        return out.iloc[0:0].copy()
+    out["type"] = out["type"].astype("string").str.strip().str.lower()
+    return out.loc[out["type"] == "earthquake"].copy()
 
 
 def extract_region(place: pd.Series) -> pd.Series:
-    """Extract text after the last comma."""
-
-    return (
-        place.fillna("Unknown")
-        .astype(str)
-        .str.split(",")
-        .str[-1]
-        .str.strip()
-    )
+    """Return the text after the final comma; keep whole place if no comma."""
+    values = place.fillna("Unknown").astype(str).str.strip()
+    return values.str.split(",").str[-1].str.strip().replace("", "Unknown")
 
 
-def iqr_outlier_mask(
-    s: pd.Series,
-    k: float = 1.5,
-) -> pd.Series:
-    """True where a value lies outside Q1 - k*IQR and Q3 + k*IQR."""
-
-    q1 = s.quantile(0.25)
-    q3 = s.quantile(0.75)
-
-    iqr = q3 - q1
-
-    lower = q1 - k * iqr
-    upper = q3 + k * iqr
-
-    return (s < lower) | (s > upper)
+def iqr_outlier_mask(s: pd.Series, k: float = 1.5) -> pd.Series:
+    """Mark values outside the IQR fences; missing values are not outliers."""
+    q1, q3 = s.quantile(0.25), s.quantile(0.75)
+    spread = q3 - q1
+    return ((s < q1 - k * spread) | (s > q3 + k * spread)).fillna(False)
 
 
 def drop_missing_target(df: pd.DataFrame) -> pd.DataFrame:
-    """Drop rows where 'mag' is missing."""
-
+    """Remove records without magnitude, which is needed to make the target."""
     return df.dropna(subset=["mag"]).copy()
 
 
 def clean(df: pd.DataFrame) -> pd.DataFrame:
-    """Apply cleaning steps and add a region column."""
-
-    df = epoch_ms_to_datetime(df)
-    df = dedupe_latest(df)
-    df = keep_earthquakes(df)
-    df = drop_missing_target(df)
-
-    df["region"] = extract_region(df["place"])
-
-    return df
+    """Convert timestamps, keep latest earthquakes, and add region."""
+    out = epoch_ms_to_datetime(df)
+    out = dedupe_latest(out)
+    out = keep_earthquakes(out)
+    out = drop_missing_target(out)
+    if "place" in out.columns:
+        out["region"] = extract_region(out["place"])
+    else:
+        out["region"] = "Unknown"
+    return out.reset_index(drop=True)
